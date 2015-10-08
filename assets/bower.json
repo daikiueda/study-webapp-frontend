@@ -1,0 +1,8 @@
+{
+  "name": "assets",
+  "version": "0.0.0",
+  "dependencies": {
+    "eventemitter3": "~1.1.1",
+    "react": "~0.13.3"
+  }
+}

@@ -4,69 +4,100 @@ const SETTINGS = {
             "./bower_components/eventemitter3/index.js",
             "./bower_components/react/react.js"
         ],
-        DEST: "../public/react/js"
+        DEST: "../public/react/js",
+        FILENAME: "libs.js"
     },
-    JS: { SRC: "./js/react/todo/app.js", DEST: "../public/react/js/todo" }
+    JS: {
+        SRC: "./js/react/todo/app.js",
+        DEST: "../public/react/js/todo",
+        FILENAME: "app.js"
+    }
 
     //JS: { SRC: "./js/*.js", DEST: "../public/js" }
 };
 
 
-var gulp = require( "gulp" ),
-    runSequence = require('run-sequence' ),
-    buffer = require( "vinyl-buffer" ),
-    babel = require( "babelify" ),
-    concat = require( "gulp-concat" ),
-    uglify = require( "gulp-uglify" ),
-    watchify = require( "gulp-watchify" ),
-    browserSync = require( "browser-sync" ).create();
+var del = require( 'del' ),
+    source = require( 'vinyl-source-stream' ),
+    buffer = require( 'vinyl-buffer' ),
 
-gulp.task( "build", function( callback ){
-    // ToDo: clean
-    runSequence( [ "build:jsLibs", "build:js" ], callback  );
+    gulp = require( 'gulp' ),
+    gutil = require( 'gulp-util' ),
+    runSequence = require('run-sequence' ),
+    plumber = require( 'gulp-plumber' ),
+    concat = require( 'gulp-concat' ),
+    uglify = require( 'gulp-uglify' ),
+
+    sourcemaps = require( 'gulp-sourcemaps' ),
+    browserify = require( 'browserify' ),
+    babelify = require( 'babelify' ),
+    watchify = require( 'watchify' ),
+
+    browserSync = require( 'browser-sync' ).create();
+
+
+var b = browserify( Object.assign(
+    {},
+    watchify.args,
+    {
+        debug: true,
+        entries: [ SETTINGS.JS.SRC ],
+        transform: [ [ 'babelify' ] ]
+    }
+) );
+
+function bundleJS(){
+    return b.bundle()
+        .on( 'error', function( err ){
+            console.log( err.message );
+            browserSync.notify( err.message, 3000 );
+            this.emit( 'end' );
+        } )
+        .pipe( plumber() )
+        .pipe( source( SETTINGS.JS.FILENAME ) )
+        .pipe( buffer() )
+        .pipe( uglify() )
+        .pipe( sourcemaps.init( { loadMaps: true } ) )
+        .pipe( sourcemaps.write( './') )
+        .pipe( gulp.dest( SETTINGS.JS.DEST ) );
+}
+
+gulp.task( 'build:js', bundleJS );
+
+gulp.task( 'build:js:watch', function(){
+    b = watchify( b );
+    b.on( 'update', bundleJS );
+    b.on( 'log', gutil.log );
+    bundleJS();
 } );
 
-
-gulp.task( "build:jsLibs", function(){
+gulp.task( 'build:jsLibs', function(){
     gulp.src( SETTINGS.JS_LIBS.SRC )
         .pipe( uglify() )
-        .pipe( concat( "libs.js" ) )
+        .pipe( concat( SETTINGS.JS_LIBS.FILENAME ) )
         .pipe( gulp.dest( SETTINGS.JS_LIBS.DEST ) );
 } );
 
-
-// Hack to enable configurable watchify watching
-var watching = false;
-gulp.task( "enable-watch-mode", function(){ watching = true } );
-
-// Browserify js files
-gulp.task( "build:js", watchify( function( watchify ){
-    return gulp.src( SETTINGS.JS.SRC )
-        .pipe( watchify( { watch: watching, transform: babel } ) )
-        .pipe( buffer() )
-        .pipe( uglify() )
-        .pipe( gulp.dest( SETTINGS.JS.DEST ) );
-} ) );
-
-gulp.task( "watchify", [ "enable-watch-mode", "build:js" ] );
+gulp.task( 'build', function( callback ){
+    // ToDo: clean
+    runSequence( [ 'build:jsLibs', 'build:js' ], callback  );
+} );
 
 
-gulp.task( "browserSync", function(){
+gulp.task( 'browserSync', function(){
     browserSync.init( {
         server: {
-            baseDir: "../public/"
+            baseDir: '../public/'
         }
     } );
 
-    return gulp.watch( "../public/**/*.*" ).on( "change", browserSync.reload );
+    return gulp.watch( '../public/**/*.*' ).on( 'change', browserSync.reload );
 } );
 
 
-// Rerun tasks when a file changes
-gulp.task( "server", function( callback ){
-    runSequence( "build", "watchify", "browserSync", callback  );
+gulp.task( 'server', function( callback ){
+    runSequence( 'build', 'build:js:watch', 'browserSync', callback  );
 } );
 
 
-// The default task (called when you run `gulp` from cli)
-gulp.task( "default", [ "build:js" ] );
+gulp.task( 'default', [ 'build' ] );
